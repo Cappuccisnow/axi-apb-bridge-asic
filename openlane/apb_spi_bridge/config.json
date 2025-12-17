@@ -1,0 +1,14 @@
+{
+	"DESIGN_NAME": "apb_spi_bridge",
+	"VERILOG_FILES": ["dir::src/apb_spi_bridge.v",
+			   "dir::src/spi_core.v"
+			  ],
+	"CLOCK_PORT": "PCLK",
+	"CLOCK_PERIOD": 20.0,
+	"DIE_AREA": "0 0 150 150",
+	"FP_SIZING": "absolute",
+	"FP_PDN_VOFFSET": 0,
+	"FP_PDN_VPITCH": 10,
+	"FP_PDN_HOFFSET": 0,
+	"FP_PDN_HPITCH": 10
+}
