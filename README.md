@@ -50,7 +50,7 @@ vvp tb_axi
 gtkwave waves.vcd  # Optional: View waveforms
 ```
 
-**APB to SPI Bridge: **
+**APB to SPI Bridge:**
 ```
 cd test/apb_spi
 iverilog -o tb_apb tb_apb_bridge.v ../../src/apb_spi/*.v
@@ -61,15 +61,18 @@ gtkwave waves.vcd
 ### 3. Run Physical Implementation (OpenLane)
 To generate the GDSII layout from RTL:
 # Start OpenLane Shell
+```
 cd openlane
 make mount
-
+```
 # Run AXI Bridge Flow
+```
 ./flow.tcl -design axi_i2c -tag final_run
-
+```
 # Run APB Bridge Flow
+```
 ./flow.tcl -design apb_spi -tag final_run
-
+```
 Check /result for the final .gds and .rpt files.
 
 ### 4. FPGA Prototyping (Altera DE2)
