@@ -49,7 +49,7 @@ module i2c_master(
   assign rw = 0; // Placeholder
   assign clk2mhz_dummy = count[6]; // Just for debug/observation
 
-  // State Machine Logic
+  //FSM
   always @(posedge clk100mhz or posedge res) begin
     if (res) begin
       state <= idle;
