@@ -47,7 +47,7 @@ module axi_slave(
   reg [15:0] memory [0:31];
   integer i;
   
-  // COMBINED LOGIC: Reset + State Update + Memory Write
+  //Reset + State Update + Memory Write
   always @(posedge clk or negedge res_n) begin
     if (!res_n) begin
       current_state <= IDLE;
@@ -65,7 +65,7 @@ module axi_slave(
     end
   end
 
-  // Next State Logic
+  //FSM
   always @(*) begin
     next_state = current_state;
     case(current_state)
