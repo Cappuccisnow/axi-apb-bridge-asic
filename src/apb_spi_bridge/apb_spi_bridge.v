@@ -11,8 +11,8 @@ module apb_spi_bridge(
   
   output wire spi_cs_l,
   output wire spi_clk,
-  output wire spi_data,
-  input wire master_data
+  output wire spi_data, //MOSI
+  input wire master_data //MISO
 );
   
   // APB state machine
@@ -34,15 +34,18 @@ module apb_spi_bridge(
   
   always @(*) begin
     nxt_st = apb_st;
+    
     case (apb_st) 
-      IDLE: if (PSEL && !PENABLE) 
-        nxt_st = SETUP;
-      SETUP: if (PSEL && PENABLE)
-        nxt_st = ACCESS;
-      ACCESS: if (!PSEL)
-        nxt_st = IDLE;
-      else 
-        nxt_st = ACCESS;
+      IDLE: 
+        if (PSEL && !PENABLE) nxt_st = SETUP;
+      
+      SETUP: 
+        if (PSEL && PENABLE) nxt_st = ACCESS;
+      
+      ACCESS: 
+        if (!PSEL) nxt_st = IDLE;
+        else       nxt_st = ACCESS;
+      
       default: nxt_st = IDLE;
     endcase
   end
