@@ -1,8 +1,8 @@
 {
 	"DESIGN_NAME": "axi_i2c_bridge",
-	"VERILOG_FILES": ["dir::src/axi_i2c_bridge.v",
-			"dir::src/axi_slave.v",
-			"dir::src/i2c_master.v"],
+	"VERILOG_FILES": ["dir::src/axi_i2c_bridge.sv",
+			"dir::src/axi_slave.sv",
+			"dir::src/i2c_master.sv"],
 	"CLOCK_PORT": "clk",
 	"CLOCK_NET": "clk",
 	"CLOCK_PERIOD": 10.0,
