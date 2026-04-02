@@ -50,9 +50,10 @@ module tb_apb_spi_bridge_slave;
 //   assign miso = mosi;
 
     //independent dummy SPI slave
-    logic [15:0] slave_tx_payloads [0:3] = {16'hAAAA, 16'hBBBB, 16'hCCCC, 16'hDDDD};
+    logic [15:0] slave_tx_payloads [0:3] = '{16'hAAAA, 16'hBBBB, 16'hCCCC, 16'hDDDD};
     logic [15:0] slave_rx_captures [0:3];
     integer slave_packet_count = 0;
+    integer bit_idx  = 15;
 
     initial begin
         PCLK = 0;
@@ -121,19 +122,21 @@ module tb_apb_spi_bridge_slave;
     // endtask
 
     initial miso = 1'b0;
-    always @(negedge cs_n) begin
-        if (slave_packet_count < 4) begin
-            logic [15:0] current_tx;
-            current_tx = slave_tx_payloads[slave_packet_count];
 
-            for (int i = 15; i >= 0; i--) begin
-                miso <= current_tx[i];
-                @(posedge sclk);
-                slave_rx_captures[slave_packet_count][i] = mosi;
-
-                if (i > 0) @(negedge sclk);
-
-                slave_packet_count++;
+    always @(negedge sclk or negedge cs_n) begin
+        if (!cs_n && slave_packet_count < 4) begin
+            miso <= slave_tx_payloads[slave_packet_count][bit_idx];
+        end
+    end
+    always @(posedge sclk) begin
+        if (!cs_n && slave_packet_count < 4) begin
+            slave_rx_captures[slave_packet_count][bit_idx] <= mosi;
+            if (bit_idx == 0) begin
+                bit_idx <= 15;
+                slave_packet_count <= slave_packet_count + 1;
+            end
+            else begin
+                bit_idx <= bit_idx - 1;
             end
         end
     end
@@ -193,6 +196,9 @@ module tb_apb_spi_bridge_slave;
 
         apb_read(32'h04);
         $display("--- Final Status Register (expected empty): 0x%h", PRDATA);
+        // should output 0x00000005 
+        // 28'd0, rx_fifo_full, rx_fifo_empty, tx_fifo_full, tx_fifo_empty
+        // rx_fifo_full = 0 | rx_fifo_empty = 1 | tx_fifo_full = 0 | tx_fifo_empty = 1  (0101 = 5)
 
         repeat(10) @(posedge PCLK);
         $display("--- Simulation Finished ---");
