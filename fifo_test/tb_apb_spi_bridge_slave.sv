@@ -10,6 +10,7 @@
 module tb_apb_spi_bridge_slave;
 
     logic PCLK;
+    logic SPI_CLK_EXT; //new independent spi clock
     logic PRESETn;
     logic [31:0] PADDR;
     logic PWRITE;
@@ -40,6 +41,7 @@ module tb_apb_spi_bridge_slave;
         
         .spi_interrupt(spi_interrupt),
 
+        .SPI_CLK_EXT(SPI_CLK_EXT),
         .cs_n(cs_n),
         .sclk(sclk),
         .mosi(mosi),
@@ -58,6 +60,11 @@ module tb_apb_spi_bridge_slave;
     initial begin
         PCLK = 0;
         forever #5 PCLK = ~PCLK; // 100MHz (10ns period)
+    end
+    
+    initial begin
+        SPI_CLK_EXT = 0;
+        forever #20 SPI_CLK_EXT = ~SPI_CLK_EXT; // 25MHz (40ns period)
     end
     
     // APB Write Transaction
@@ -163,9 +170,9 @@ module tb_apb_spi_bridge_slave;
         apb_write(32'h00, 16'h3333);
         apb_write(32'h00, 16'h4444);
         
-        apb_read(32'h00);
+        apb_read(32'h04);
 
-        $display("--- Status Register read: 0x%h ---", PRDATA);
+        $display("--- Status Register read after burst: 0x%h ---", PRDATA);
 
         $display("--- Waiting for SPI to transmit ---");
         for (int i = 0; i < 4; i++) begin
@@ -195,7 +202,7 @@ module tb_apb_spi_bridge_slave;
         $display("  CPU read word 4 (expected DDDD): 0x%h", PRDATA[15:0]);
 
         apb_read(32'h04);
-        $display("--- Final Status Register (expected empty): 0x%h", PRDATA);
+        $display("--- Final Status register read (expected empty): 0x%h", PRDATA);
         // should output 0x00000005 
         // 28'd0, rx_fifo_full, rx_fifo_empty, tx_fifo_full, tx_fifo_empty
         // rx_fifo_full = 0 | rx_fifo_empty = 1 | tx_fifo_full = 0 | tx_fifo_empty = 1  (0101 = 5)

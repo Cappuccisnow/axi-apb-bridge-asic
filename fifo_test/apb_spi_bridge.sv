@@ -16,6 +16,7 @@ module apb_spi_bridge(
   output logic spi_interrupt,
   
   // SPI
+  input logic SPI_CLK_EXT, //new spi clock 
   output logic cs_n,
   output logic sclk,
   output logic mosi,
@@ -44,7 +45,7 @@ module apb_spi_bridge(
     .wr_inc  (PSEL && PENABLE && PWRITE && (PADDR[7:0] == 8'h00)),
     .wr_data (PWDATA[15:0]),
     .wr_full (tx_fifo_full),
-    .rd_clk  (PCLK),
+    .rd_clk  (SPI_CLK_EXT),
     .rd_rst_n(PRESETn),
     .rd_inc  (tx_fifo_rd_en),
     .rd_data (tx_fifo_rd_data),
@@ -56,7 +57,7 @@ module apb_spi_bridge(
     .DATA_WIDTH(16),
     .ADDR_WIDTH(4)
   ) u_rx_fifo (
-    .wr_clk  (PCLK),
+    .wr_clk  (SPI_CLK_EXT),
     .wr_rst_n(PRESETn),
     .wr_inc  (rx_fifo_wr_en),
     .wr_data (spi_rx_raw),
@@ -82,9 +83,8 @@ module apb_spi_bridge(
     
   assign tx_fifo_rd_en = !tx_fifo_empty && !spi_busy;
 
-  // Instantiate SPI Core
   spi_core u_spi_core (
-    .clk(PCLK),
+    .clk(SPI_CLK_EXT),
     .reset(!PRESETn), // APB is active low, Core is active high
     .start(tx_fifo_rd_en),
     .datain(tx_fifo_rd_data),
@@ -99,6 +99,17 @@ module apb_spi_bridge(
   );
 
   assign rx_fifo_wr_en = spi_done;
-  assign spi_interrupt = spi_done;
+  //assign spi_interrupt = spi_done;
+
+  logic [2:0] interrupt_sync_shift;
+  always_ff @(posedge PCLK or negedge PRESETn) begin
+    if (!PRESETn) begin
+      interrupt_sync_shift <= 3'b000;
+    end
+    else begin
+      interrupt_sync_shift <= {interrupt_sync_shift[1:0], spi_done};
+    end
+  end
+  assign spi_interrupt = {interrupt_sync_shift[1] & ~interrupt_sync_shift[2]};
 
 endmodule
