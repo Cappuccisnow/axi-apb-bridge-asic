@@ -86,7 +86,7 @@ module apb_spi_bridge(
     if (state == ACCESS && !PWRITE) begin
       case (PADDR[7:0])
         8'h00: PRDATA = {16'd0, spi_rx_reg};
-        8'h04: PRDATA = {16'd0, spi_busy};
+        8'h04: PRDATA = {31'd0, spi_busy};
         default: PRDATA = '0;
       endcase
     end
