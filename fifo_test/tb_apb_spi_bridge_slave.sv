@@ -47,9 +47,6 @@ module tb_apb_spi_bridge_slave;
         .mosi(mosi),
         .miso(miso)
     );
-  
-//   // loopback 
-//   assign miso = mosi;
 
     //independent dummy SPI slave
     logic [15:0] slave_tx_payloads [0:3] = '{16'hAAAA, 16'hBBBB, 16'hCCCC, 16'hDDDD};
@@ -86,8 +83,6 @@ module tb_apb_spi_bridge_slave;
         @(posedge PCLK);
         PSEL <= 1'b0;
         PENABLE <= 1'b0;
-        //PWRITE <= 1'b0;
-        //$display("APB WRITE: Addr=0x%h Data=0x%h", addr, data);
         end
     endtask
 
@@ -110,23 +105,8 @@ module tb_apb_spi_bridge_slave;
         // Data is valid now, PREADY is high
         PSEL <= 1'b0;
         PENABLE <= 1'b0;
-        //$display("APB READ:  Addr=0x%h Data=0x%h", addr, PRDATA);
         end
     endtask
-
-    // // Wait for SPI Busy to clear
-    // task wait_spi_done();
-    //   logic busy;
-    //   begin
-    //     busy = 1'b1;
-    //     while (busy) begin
-    //       apb_read(32'h04); // Read Status Register
-    //       busy = PRDATA[0]; // Bit 0 is the busy flag
-    //       if (busy) repeat(5) @(posedge PCLK);
-    //   // Wait a bit before polling again to reduce log spam
-    //     end
-    //   end
-    // endtask
 
     initial miso = 1'b0;
 
@@ -149,9 +129,7 @@ module tb_apb_spi_bridge_slave;
     end
 
     initial begin
-        $dumpfile("apb_spi_wave.vcd");
-        $dumpvars(0, tb_apb_spi_bridge_slave);
-        
+
         PRESETn = 0;
         PSEL = 0; 
         PENABLE = 0; 
