@@ -14,6 +14,9 @@ module apb_spi_bridge(
   output logic PREADY,
   
   output logic spi_interrupt,
+    // DMA interface
+  output logic dma_tx_req,
+  output logic dma_rx_req,
   
   // SPI
   input logic SPI_CLK_EXT, //new spi clock 
@@ -148,4 +151,6 @@ module apb_spi_bridge(
   end
   assign spi_interrupt = {interrupt_sync_shift[1] & ~interrupt_sync_shift[2]};
 
+  assign dma_tx_req = spi_ctrl_reg[3] & ~tx_fifo_full;
+  assign dma_rx_req = spi_ctrl_reg[2] & ~rx_fifo_empty;
 endmodule

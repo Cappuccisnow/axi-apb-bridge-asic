@@ -1,11 +1,4 @@
 `timescale 1ns / 1ps
-// for edaplayground
-// `include "spi_core.sv"
-// `include "async_fifo.sv"
-// `include "dual_port_ram.sv"
-// `include "fifo_rptr.sv"
-// `include "fifo_wptr.sv"
-// `include "sync_ptr.sv"
 
 module tb_apb_spi_bridge_slave;
 
@@ -21,13 +14,15 @@ module tb_apb_spi_bridge_slave;
     logic PREADY;
     
     logic spi_interrupt;
+    logic dma_tx_req;
+    logic dma_rx_req;
+    
     // SPI 
     logic [3:0] cs_n;
     logic sclk;
     logic mosi;   
     logic miso; 
     
-    //Instantiate the DUT 
     apb_spi_bridge u_dut (
         .PCLK(PCLK),
         .PRESETn(PRESETn),
@@ -40,6 +35,8 @@ module tb_apb_spi_bridge_slave;
         .PREADY(PREADY),
         
         .spi_interrupt(spi_interrupt),
+        .dma_tx_req(dma_tx_req),
+        .dma_rx_req(dma_rx_req),
 
         .SPI_CLK_EXT(SPI_CLK_EXT),
         .cs_n(cs_n),
@@ -142,13 +139,22 @@ module tb_apb_spi_bridge_slave;
         repeat(2) @(posedge PCLK);
         
         $display("--- Reconfiguring SPI core ---");
-        apb_write(32'h08, 16'h0803);
+        apb_write(32'h08, 16'h080F);
         apb_read(32'h08);
         $display("--- Verified control register: 0x%h ---", PRDATA);
 
         apb_write(32'h0C, 32'h0000_0002);
         apb_read(32'h0C);
         $display("--- Slave select register: 0x%h ---", PRDATA);
+
+        // DMA RX checker
+        @(posedge PCLK);
+        if (dma_tx_req == 1'b1) begin
+            $display("SUCCESS: DMA TX request went high, system is awake");
+        end
+        else begin
+            $display("FAIL: DMA TX request is dead");
+        end 
 
         $display("--- Bursting 4 words into TX FIFO ---");       
         apb_write(32'h00, 16'h1111);
@@ -171,6 +177,15 @@ module tb_apb_spi_bridge_slave;
         $display("--- Checking dummy captured data ---");
         for (int i = 0; i < 4; i++) begin
             $display("  Slave received word %0d: 0x%h", i, slave_rx_captures[i]);
+        end
+
+        // DMA RX checker
+        @(posedge PCLK);
+        if (dma_rx_req == 1'b1) begin
+            $display("SUCCESS: DMA RX request went high, system is ready to extract");
+        end
+        else begin
+            $display("FAIL: DMA RX request is dead");
         end
 
         $display("--- CPU popping 4 words from RX FIFO ---");

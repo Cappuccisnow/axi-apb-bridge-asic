@@ -19,10 +19,21 @@ spi so far only works in mode 0
         + bit [15:8] mapped to clock divider, [0] to cpha, [1] to cpol
         + count edges instead of bits to recognize leading and trailing edges
 
-4. multiple slave select [ ]
+4. multiple slave select [x]
     - create a slave select register in addr 0x0C
     - cpu writes the ID in here (00: talk to slave 0, 01: to slave 1, ...)
     - make cs_n [3:0] 
     
-
-5. integrate dma
+5. integrate dma [ ]
+cpu is carrying every single word to apb bus to drop to the FIFO, need to free the CPU
+    - create a controller that takes command "put what in where"
+        + utilizing the ~tx_fifo_full and ~rx_fifo_empty
+    - create 2 request wires signaling when the tx FIFO has empty space and when the rx FIFO has data waiting
+    - dma will shove in a word -> tx FIFO fills up -> tx request wire drops low
+    -> dma pauses -> spi transmits the word -> FIFO empties -> tx request goes high -> repeats 
+        + need safety switches: from the spi_ctrl_reg, save [2] for dma transmit enable and [3] for dma receive enable
+        (or the moment the chip boots up from reset and the tx FIFO is empty, the pin will instantly 
+        shout at the dma controller to send data before the cpu has even configured baud rate or select slave)
+    - previously wrote 16'h0803 to 0x08, now need [3] to be 1 as well (dma_tx_en bit)
+        + 16'h0803 + 0x0008 (bit 3) = 16'h080B
+        + 16'h080B + 0x0004 (bit 2) = 16'h080F to turn dma_rx_en on
