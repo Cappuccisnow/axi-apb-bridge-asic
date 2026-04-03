@@ -5,20 +5,7 @@ module tb_axi_i2c_bridge;
   logic clk;
   logic res_n;
 
-  logic arvalid, awvalid, wvalid, bready, rready;
-  logic [4:0] araddr, awaddr;
-  logic [15:0] wdata;
-  logic [3:0] arlen, awlen;
-  logic [2:0] arsize, awsize;
-  logic [1:0] arburst, awburst;
-  logic wlast;
-
-  logic arready, awready, wready;
-  logic bvalid, rvalid;
-  logic [1:0] bresp, rresp;
-  logic rlast;
-  logic [15:0] rdata;
-
+  
   tri1 sda;
   tri1 scl;
 

@@ -1,0 +1,220 @@
+`timescale 1ns / 1ps
+
+module tb_axi_i2c_bridge;
+
+  logic clk;
+  logic res_n;
+
+  logic [4:0] awaddr, araddr;
+  logic [15:0] wdata, rdata;
+  logic awvalid, awready;
+  logic wvalid, wready;
+  logic arvalid, arready;
+  logic rvalid, rready;
+  logic [1:0] bresp, rresp;
+  logic bvalid, bready;
+
+  tri1 sda;
+  tri1 scl;
+
+  // drives SDA low on the 9th clock tick (ACK)
+  logic slave_drive_sda = 0;
+  logic i2c_active = 0;
+  logic [7:0] captured_byte;
+  int bit_count;
+
+  axi_i2c_bridge u_dut (
+    .clk(clk),
+    .res_n(res_n),
+    
+    // AXI
+    .arvalid(arvalid), .awvalid(awvalid), .wvalid(wvalid), 
+    .bready(bready), .rready(rready),
+    .araddr(araddr), .awaddr(awaddr), 
+    .wdata(wdata), 
+    
+    .arready(arready), .awready(awready), .wready(wready),
+    .bvalid(bvalid), .rvalid(rvalid), 
+    .bresp(bresp), .rresp(rresp), 
+    .rdata(rdata),
+    
+    // I2C
+    .sda(sda), 
+    .scl(scl)
+  );
+
+  // open drain assignment
+  assign sda = slave_drive_sda ? 1'b0 : 1'bz;
+
+  initial begin
+    clk = 0;
+    forever #5 clk = ~clk; // 100MHz clock (10ns period)
+  end
+
+  // Detect Start Condition
+  always @(negedge sda) begin
+    if (scl === 1'b1) begin
+      i2c_active <= 1;
+      $display("\n[I2C monitor] START condition detected at time %0t\n", $time);
+    end
+  end
+
+  // Detect Stop Condition
+  always @(posedge sda) begin
+    if (scl === 1'b1) begin
+      i2c_active <= 0;
+      $display("\n[I2C monitor] STOP condition detected at time %0t\n", $time);
+    end
+  end
+
+  logic is_read_txn = 0;
+  logic [7:0] dummy_sensor_data = 8'hAB;
+
+  // read the data line
+  always @(posedge scl) begin
+    if (i2c_active) begin 
+      if (bit_count < 8) begin
+      captured_byte[7 - bit_count] <= sda;
+      end
+      else if (bit_count >= 9 && bit_count < 17 && !is_read_txn) begin
+        captured_byte[16 - bit_count] <= sda;
+      end
+    end
+  end
+  
+  // i2c slave
+  always @(negedge scl) begin
+    if (i2c_active) begin
+      bit_count <= bit_count + 1;
+
+      if (bit_count == 7) begin
+        is_read_txn <= (sda === 1'b1);
+        slave_drive_sda <= 1'b1;
+        $display("\n[I2C slave] ACK address. Read mode: %b", sda);         
+      end 
+
+      // release ACK
+      else if (bit_count == 8) begin
+        slave_drive_sda <= 1'b0;
+      end
+
+      // master sends data to slave
+      else if (!is_read_txn && bit_count == 16) begin
+        slave_drive_sda <= 1'b1;       
+        $display("[I2C slave] Master wrote data: 0x%h", {captured_byte[7:1], sda});
+      end
+
+      else if (is_read_txn && bit_count == 17) begin
+        slave_drive_sda <= 1'b0;
+        bit_count <= 0;
+      end
+
+      // slave sends data to master
+      else if (is_read_txn && bit_count >= 9 && bit_count <= 16) begin
+        if (dummy_sensor_data[16 - bit_count] == 1'b0) begin
+          slave_drive_sda <= 1'b1;
+        end
+        else slave_drive_sda <= 1'b0;
+      end
+
+      else if (is_read_txn && bit_count == 17) begin
+        slave_drive_sda <= 1'b0;
+        bit_count <= 0;
+      end
+
+    end 
+    else begin
+      bit_count <= 0;
+      slave_drive_sda <= 1'b0;
+      is_read_txn <= 0;
+    end
+  end
+
+  task write_axi (input [4:0] addr, input [15:0] data);
+    begin
+      
+      @(posedge clk);
+      awaddr <= addr;
+      awvalid <= 1'b1;
+      wdata <= data;
+      wvalid <= 1'b1;
+
+      wait (awready && wready);
+      @(posedge clk);
+
+      awvalid <= 1'b0;
+      wvalid <= 1'b0;
+      bready <= 1'b1;
+
+      wait (bvalid);
+      @(posedge clk);
+
+      bready <= 1'b0;
+      
+      $display("AXI write: Addr: 0x%h, Data: 0x%h, Resp: %b", addr, data, bresp);
+    end
+  endtask
+
+  task read_axi (input [4:0] addr);
+    begin
+      @(posedge clk);
+
+      araddr <= addr;
+      arvalid <= 1'b1;
+
+      wait (arready);
+      @(posedge clk);
+
+      arvalid <= 1'b0;
+      rready <= 1'b1;
+
+      wait (rvalid);
+      @(posedge clk);
+
+      $display("AXI read: Addr: 0x%h, Data: 0x%h, Error code = %b", addr, rdata, rresp);
+      rready <= 1'b0;
+    end
+  endtask
+
+  initial begin
+    
+    res_n = 0;
+    arvalid = 0; awvalid = 0; wvalid = 0; bready = 0; rready = 0;
+    araddr = 0; awaddr = 0; wdata = 0;
+
+    repeat(10) @(posedge clk);
+    res_n = 1;
+    repeat(5) @(posedge clk);
+
+
+    $display("--- Starting AXI Write Tests ---");
+
+    // write i2c address to 0x50
+    write_axi(5'd0, 16'h0050); 
+    
+    // write i2c data to 0xAA
+    write_axi(5'd1, 16'h00AA); 
+    
+    // write start bit
+    write_axi(5'd2, 16'h0001); 
+    
+    $display("--- Wait for I2C Transaction ---");
+    //Wait for slow I2C
+    repeat(10) begin
+      read_axi(5'd3);
+      if  (rdata[0] == 0) break;
+      repeat(500) @(posedge clk);
+    end
+
+    $display("--- Starting AXI Read Test ---");
+    // read new data from 0x50, last bit is set to 1 (0x51) to indicate read transaction
+    write_axi(5'd0, 16'h0051);
+    // write start bit
+    write_axi(5'd2, 16'h0001);
+
+    repeat(10000) @(posedge clk);
+    $display("--- Simulation Finished ---");
+    $finish;
+  end
+endmodule
+

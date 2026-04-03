@@ -1,0 +1,2 @@
+1. turn axi to axi lite [x] 
+
