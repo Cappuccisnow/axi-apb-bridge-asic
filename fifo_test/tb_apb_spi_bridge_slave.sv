@@ -141,6 +141,12 @@ module tb_apb_spi_bridge_slave;
         PRESETn = 1;
         repeat(2) @(posedge PCLK);
         
+        $display("--- Reconfiguring SPI core ---");
+        apb_write(32'h08, 16'h0803);
+
+        apb_read(32'h08);
+        $display("--- Verified control register: 0x%h ---", PRDATA);
+
         $display("--- Bursting 4 words into TX FIFO ---");
         
         apb_write(32'h00, 16'h1111);

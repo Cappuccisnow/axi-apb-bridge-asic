@@ -28,6 +28,9 @@ module apb_spi_bridge(
   logic rx_fifo_empty, rx_fifo_full;
   logic tx_fifo_rd_en, rx_fifo_wr_en;
 
+  // dynamic control register (addr 0x08)
+  logic [15:0] spi_ctrl_reg;
+
   // SPI master and control logic
   logic [15:0] spi_rx_raw;
   logic spi_busy, spi_done;
@@ -69,6 +72,19 @@ module apb_spi_bridge(
     .rd_empty(rx_fifo_empty)
   );
 
+  // apb write for control reg
+  always_ff @(posedge PCLK or negedge PRESETn) begin
+    if (!PRESETn) begin
+      // default reset state (divider = 2, CPOL = 0, CPHA = 0)
+      spi_ctrl_reg <= 16'h0200;
+    end
+    else if (PSEL && PENABLE && PWRITE && PREADY) begin
+      if (PADDR[7:0] == 8'h08) begin
+        spi_ctrl_reg <= PWDATA[15:0];
+      end
+    end
+  end
+
   // apb read mux
   always_comb begin
     PRDATA = '0;
@@ -76,6 +92,7 @@ module apb_spi_bridge(
       case (PADDR[7:0])
         8'h00: PRDATA = {16'd0, rx_fifo_rd_data};
         8'h04: PRDATA = {28'd0, rx_fifo_full, rx_fifo_empty, tx_fifo_full, tx_fifo_empty};
+        8'h08: PRDATA = {16'd0, spi_ctrl_reg};
         default: PRDATA = '0;
       endcase
     end
@@ -91,6 +108,10 @@ module apb_spi_bridge(
     .dataout(spi_rx_raw),
     .busy(spi_busy),
     .done(spi_done),
+
+    .clk_div(spi_ctrl_reg[15:8]),
+    .cpol(spi_ctrl_reg[1]),
+    .cpha(spi_ctrl_reg[0]),
 
     .cs_n(cs_n),
     .sclk(sclk),
