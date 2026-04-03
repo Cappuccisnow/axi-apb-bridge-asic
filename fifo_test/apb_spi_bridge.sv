@@ -17,7 +17,7 @@ module apb_spi_bridge(
   
   // SPI
   input logic SPI_CLK_EXT, //new spi clock 
-  output logic cs_n,
+  output logic [3:0] cs_n,
   output logic sclk,
   output logic mosi,
   input logic miso
@@ -30,6 +30,10 @@ module apb_spi_bridge(
 
   // dynamic control register (addr 0x08)
   logic [15:0] spi_ctrl_reg;
+
+  // slave select register (addr 0x0C)
+  logic [1:0] spi_ss_reg;
+  logic core_cs_n;
 
   // SPI master and control logic
   logic [15:0] spi_rx_raw;
@@ -77,10 +81,14 @@ module apb_spi_bridge(
     if (!PRESETn) begin
       // default reset state (divider = 2, CPOL = 0, CPHA = 0)
       spi_ctrl_reg <= 16'h0200;
+      spi_ss_reg <= 2'b00;
     end
     else if (PSEL && PENABLE && PWRITE && PREADY) begin
       if (PADDR[7:0] == 8'h08) begin
         spi_ctrl_reg <= PWDATA[15:0];
+      end
+      else if (PADDR[7:0] == 8'h0C) begin
+        spi_ss_reg <= PWDATA[1:0];
       end
     end
   end
@@ -93,6 +101,7 @@ module apb_spi_bridge(
         8'h00: PRDATA = {16'd0, rx_fifo_rd_data};
         8'h04: PRDATA = {28'd0, rx_fifo_full, rx_fifo_empty, tx_fifo_full, tx_fifo_empty};
         8'h08: PRDATA = {16'd0, spi_ctrl_reg};
+        8'h0C: PRDATA = {30'd0, spi_ss_reg};
         default: PRDATA = '0;
       endcase
     end
@@ -113,11 +122,17 @@ module apb_spi_bridge(
     .cpol(spi_ctrl_reg[1]),
     .cpha(spi_ctrl_reg[0]),
 
-    .cs_n(cs_n),
+    .cs_n(core_cs_n),
     .sclk(sclk),
     .mosi(mosi),
     .miso(miso)
   );
+
+  // demux for slave select
+  always_comb begin
+    cs_n = 4'b1111;
+    cs_n[spi_ss_reg] = core_cs_n;
+  end
 
   assign rx_fifo_wr_en = spi_done;
   //assign spi_interrupt = spi_done;

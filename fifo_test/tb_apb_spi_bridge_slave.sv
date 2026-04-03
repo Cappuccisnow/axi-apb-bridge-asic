@@ -22,7 +22,7 @@ module tb_apb_spi_bridge_slave;
     
     logic spi_interrupt;
     // SPI 
-    logic cs_n;
+    logic [3:0] cs_n;
     logic sclk;
     logic mosi;   
     logic miso; 
@@ -110,13 +110,13 @@ module tb_apb_spi_bridge_slave;
 
     initial miso = 1'b0;
 
-    always @(negedge sclk or negedge cs_n) begin
-        if (!cs_n && slave_packet_count < 4) begin
+    always @(negedge sclk or negedge cs_n[2]) begin
+        if (!cs_n[2] && slave_packet_count < 4) begin
             miso <= slave_tx_payloads[slave_packet_count][bit_idx];
         end
     end
     always @(posedge sclk) begin
-        if (!cs_n && slave_packet_count < 4) begin
+        if (!cs_n[2] && slave_packet_count < 4) begin
             slave_rx_captures[slave_packet_count][bit_idx] <= mosi;
             if (bit_idx == 0) begin
                 bit_idx <= 15;
@@ -143,12 +143,14 @@ module tb_apb_spi_bridge_slave;
         
         $display("--- Reconfiguring SPI core ---");
         apb_write(32'h08, 16'h0803);
-
         apb_read(32'h08);
         $display("--- Verified control register: 0x%h ---", PRDATA);
 
-        $display("--- Bursting 4 words into TX FIFO ---");
-        
+        apb_write(32'h0C, 32'h0000_0002);
+        apb_read(32'h0C);
+        $display("--- Slave select register: 0x%h ---", PRDATA);
+
+        $display("--- Bursting 4 words into TX FIFO ---");       
         apb_write(32'h00, 16'h1111);
         apb_write(32'h00, 16'h2222);
         apb_write(32'h00, 16'h3333);

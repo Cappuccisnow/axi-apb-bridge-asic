@@ -1,0 +1,28 @@
+1. integrate asynchronous FIFO [x]
+    - separate the APB clock from the SPI clock
+    - place async FIFOs between them
+    * can burst data of 4 words at 100MHz and walk away while SPI empties the FIFO at 25MHz
+
+2. interrupt pulse synchronizer [x]
+when spi_core finishes trasmitting it asserts 'done' for 1 cycle, but 1 spi clk cycle is 40ns, while CPU is 10ns so 'done' will be sampled high 4 times in a row.
+    - create a shift register inside the apb domain driven by PCLK
+    - feed the spi_done from the spi domain into the bottom of this shift register
+    - create a new output spi_interrupt 
+        + first 2 bits [0] [1] of the shift register absorb the metastability caused by crossing async domain
+        + turn a wide pulse into a spike. [1] represents the signal value, [2] represents the signal value 1 cycle ago
+        [1] & ~[2] will ask the question "is it high rn and low the last cycle" to create a single cycle pulse
+
+3. dynamic control register [x] 
+spi so far only works in mode 0
+    - create a switch for mode selection 
+        + store at addr 0x08, a FF array spi_ctrl_reg
+        + bit [15:8] mapped to clock divider, [0] to cpha, [1] to cpol
+        + count edges instead of bits to recognize leading and trailing edges
+
+4. multiple slave select [ ]
+    - create a slave select register in addr 0x0C
+    - cpu writes the ID in here (00: talk to slave 0, 01: to slave 1, ...)
+    - make cs_n [3:0] 
+    
+
+5. integrate dma
