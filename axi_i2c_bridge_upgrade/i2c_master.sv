@@ -39,6 +39,7 @@ module i2c_master #(
   logic [15:0] tick_count;
   logic [1:0] phase;
   logic tick;
+  logic start_pending;
 
   logic sda_h;
   logic scl_h;
@@ -55,7 +56,7 @@ module i2c_master #(
   assign sda = (!sda_h) ? 1'b0 : 1'bz;
   assign scl = (!scl_h) ? 1'b0 : 1'bz;
   
-  assign busy = (state != IDLE);
+  assign busy = (state != IDLE) || start_pending;
 
   // phase tick generator
   always_ff @(posedge clk100mhz or posedge reset) begin
@@ -71,6 +72,25 @@ module i2c_master #(
       else begin
         tick_count <= tick_count + 1;
         tick <= 1'b0;
+      end
+    end
+  end
+
+    // fast clock command capture
+  always_ff @(posedge clk100mhz or posedge reset) begin
+    if (reset) begin
+      start_pending <= 1'b0;
+      addr_to_send_store <= 8'd0;
+      data_to_send_store <= 8'd0;
+    end
+    else begin
+      if (new_cmd) begin
+        start_pending <= 1'b1;
+        addr_to_send_store <= addr_to_send;
+        data_to_send_store <= data_to_send;
+      end
+      else if (tick && state == IDLE && start_pending) begin
+        start_pending <= 1'b0;
       end
     end
   end
@@ -97,8 +117,6 @@ module i2c_master #(
           scl_h <= 1'b1;
           phase <= 2'b00;
           if (new_cmd) begin
-            addr_to_send_store <= addr_to_send;
-            data_to_send_store <= data_to_send;
             ack_error <= 1'b0;
             state <= START;
           end
@@ -288,4 +306,6 @@ module i2c_master #(
       end
     end
   end
+  
+
 endmodule

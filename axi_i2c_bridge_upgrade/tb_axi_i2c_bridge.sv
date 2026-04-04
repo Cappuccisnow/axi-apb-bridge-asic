@@ -139,13 +139,15 @@ module tb_axi_i2c_bridge;
       wdata <= data;
       wvalid <= 1'b1;
 
-      wait (awready && wready);
+      wait (awready);
       @(posedge clk);
-
       awvalid <= 1'b0;
-      wvalid <= 1'b0;
-      bready <= 1'b1;
 
+      wait (wready);
+      @(posedge clk);
+      wvalid <= 1'b0;
+
+      bready <= 1'b1;
       wait (bvalid);
       @(posedge clk);
 
