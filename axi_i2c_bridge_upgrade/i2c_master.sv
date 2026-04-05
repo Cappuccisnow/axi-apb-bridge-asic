@@ -116,7 +116,7 @@ module i2c_master #(
           sda_h <= 1'b1;
           scl_h <= 1'b1;
           phase <= 2'b00;
-          if (new_cmd) begin
+          if (start_pending) begin
             ack_error <= 1'b0;
             state <= START;
           end
