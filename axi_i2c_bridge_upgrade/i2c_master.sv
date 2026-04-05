@@ -84,7 +84,7 @@ module i2c_master #(
       data_to_send_store <= 8'd0;
     end
     else begin
-      if (new_cmd) begin
+      if (new_cmd && state == IDLE && !start_pending) begin
         start_pending <= 1'b1;
         addr_to_send_store <= addr_to_send;
         data_to_send_store <= data_to_send;

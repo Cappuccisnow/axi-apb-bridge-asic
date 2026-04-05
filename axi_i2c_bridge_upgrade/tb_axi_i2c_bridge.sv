@@ -53,15 +53,17 @@ module tb_axi_i2c_bridge;
 
   // Detect Start Condition
   always @(negedge sda) begin
-    if (scl === 1'b1) begin
+    if (scl === 1'b1 && $time > 0) begin
       i2c_active <= 1;
+      bit_count <= 0;
+      slave_drive_sda <= 1'b0;
       $display("\n[I2C monitor] START condition detected at time %0t\n", $time);
     end
   end
 
   // Detect Stop Condition
   always @(posedge sda) begin
-    if (scl === 1'b1) begin
+    if (scl === 1'b1 && $time > 0) begin
       i2c_active <= 0;
       $display("\n[I2C monitor] STOP condition detected at time %0t\n", $time);
     end
@@ -89,46 +91,36 @@ module tb_axi_i2c_bridge;
 
       if (bit_count == 7) begin
         is_read_txn <= (sda === 1'b1);
-        slave_drive_sda <= 1'b1;
-        $display("\n[I2C slave] ACK address. Read mode: %b", sda);         
-      end 
-
-      // release ACK
+      end
       else if (bit_count == 8) begin
-        slave_drive_sda <= 1'b0;
-      end
-
-      // master sends data to slave
-      else if (!is_read_txn && bit_count == 16) begin
-        slave_drive_sda <= 1'b1;       
-        $display("[I2C slave] Master wrote data: 0x%h", {captured_byte[7:1], sda});
-      end
-
-      else if (is_read_txn && bit_count == 17) begin
-        slave_drive_sda <= 1'b0;
-        bit_count <= 0;
-      end
-
-      // slave sends data to master
-      else if (is_read_txn && bit_count >= 9 && bit_count <= 16) begin
-        if (dummy_sensor_data[16 - bit_count] == 1'b0) begin
-          slave_drive_sda <= 1'b1;
+        slave_drive_sda <= 1'b1;
+        $display("\n[I2C slave] ACK address. Read mode: %b", (sda === 1'b1));         
+      end 
+      else if (bit_count == 9) begin
+        if (is_read_txn) begin
+          slave_drive_sda <= (dummy_sensor_data[7] == 1'b0);
         end
-        else slave_drive_sda <= 1'b0;
       end
-
-      else if (is_read_txn && bit_count == 17) begin
+      else if (bit_count >= 10 && bit_count <= 16) begin
+        if (is_read_txn) begin
+          slave_drive_sda <= (dummy_sensor_data[16 - bit_count] == 1'b0);
+        end
+      end
+      else if (bit_count == 17) begin
+        if (!is_read_txn) begin
+          slave_drive_sda <= 1'b1;
+          $display("[I2C slave] Master wrote data: 0x%h", captured_byte);
+        end
+        else begin  
+          slave_drive_sda <= 1'b0;
+        end
+      end
+      else if (bit_count == 18) begin
         slave_drive_sda <= 1'b0;
-        bit_count <= 0;
       end
-
-    end 
-    else begin
-      bit_count <= 0;
-      slave_drive_sda <= 1'b0;
-      is_read_txn <= 0;
     end
   end
+
 
   task write_axi (input [4:0] addr, input [15:0] data);
     begin
@@ -202,10 +194,10 @@ module tb_axi_i2c_bridge;
     
     $display("--- Wait for I2C Transaction ---");
     //Wait for slow I2C
-    repeat(10) begin
+    repeat(1000) begin
       read_axi(5'd3);
       if  (rdata[0] == 0) break;
-      repeat(500) @(posedge clk);
+      repeat(5000) @(posedge clk);
     end
 
     $display("--- Starting AXI Read Test ---");
@@ -213,6 +205,17 @@ module tb_axi_i2c_bridge;
     write_axi(5'd0, 16'h0051);
     // write start bit
     write_axi(5'd2, 16'h0001);
+
+    $display("--- Polling status ---");
+    //Wait for slow I2C
+    repeat(1000) begin
+      read_axi(5'd3);
+      if  (rdata[0] == 0) break;
+      repeat(5000) @(posedge clk);
+    end
+
+    $display("--- Fetching captured data ---");
+    read_axi(5'd4);
 
     repeat(10000) @(posedge clk);
     $display("--- Simulation Finished ---");
