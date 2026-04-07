@@ -91,9 +91,9 @@ module tb_axi_i2c_bridge;
       if (bit_count == 8) begin
         slave_drive_sda <= 1'b1;
         is_read_txn <= shift_reg[0];
-        $display("[I2C slave] ACK address. Read mode: %b", shift_reg[0]);
       end
       else if (bit_count == 9) begin
+        $display("[I2C slave] ACK address complete. Read mode: %b", is_read_txn);
         if (shift_reg[0]) begin
           slave_drive_sda <= ~dummy_sensor_data[7];
         end
@@ -110,13 +110,13 @@ module tb_axi_i2c_bridge;
         slave_drive_sda <= 1'b0;
         if (!is_read_txn) begin
           slave_drive_sda <= 1'b1;
-          $display("[I2C slave] Master wrote data: 0x%h", shift_reg);
         end 
         else begin
           slave_drive_sda <= 1'b0;
         end
       end
       else if (bit_count == 18) begin
+        if (!is_read_txn) $display("[I2C slave] Master wrote data: 0x%h", shift_reg);
         slave_drive_sda <= 1'b0;
         bit_count <= 9;
       end
@@ -150,7 +150,7 @@ module tb_axi_i2c_bridge;
     end
   endtask
 
-  task read_axi (input [4:0] addr);
+  task read_axi (input [4:0] addr, input logic quiet = 1'b0);
     begin
       @(posedge clk);
 
@@ -166,7 +166,8 @@ module tb_axi_i2c_bridge;
       wait (rvalid);
       @(posedge clk);
 
-      $display("AXI read: Addr: 0x%h, Data: 0x%h, Error code = %b", addr, rdata, rresp);
+      if (!quiet)
+        $display("AXI read: Addr: 0x%h, Data: 0x%h, Error code = %b", addr, rdata, rresp);
       rready <= 1'b0;
     end
   endtask
@@ -196,7 +197,7 @@ module tb_axi_i2c_bridge;
     $display("--- Wait for I2C Transaction ---");
     //Wait for slow I2C
     repeat(1000) begin
-      read_axi(5'd3);
+      read_axi(5'd3, 1'b1);
       if  (rdata[0] == 0) break;
       repeat(5000) @(posedge clk);
     end
@@ -210,13 +211,39 @@ module tb_axi_i2c_bridge;
     $display("--- Polling status ---");
     //Wait for slow I2C
     repeat(1000) begin
-      read_axi(5'd3);
+      read_axi(5'd3, 1'b1);
       if  (rdata[0] == 0) break;
       repeat(5000) @(posedge clk);
     end
 
     $display("--- Fetching captured data ---");
     read_axi(5'd4);
+
+    $display("--- Testing repeated START test ---");
+    write_axi(5'd0, 16'h0050);
+    //write internal memory address 0xBB
+    write_axi(5'd1, 16'h00BB);
+
+    //send start bit, but set bit 1 to hold the bus (0x0003 instead of 0x0001) 
+    write_axi(5'd2, 16'h0003);
+
+    $display("--- Waiting for the first half to finish ---");
+    repeat(1000) begin
+      read_axi(5'd3, 1'b1);
+      if   (rdata[0] == 0) break;
+      repeat(5000) @(posedge clk);
+    end
+
+    write_axi(5'd0, 16'h0051);
+    write_axi(5'd2, 16'h0001);
+
+    repeat(1000) begin
+      read_axi(5'd3, 1'b1);
+      if   (rdata[0] == 0) break;
+      repeat(5000) @(posedge clk);
+    end
+
+    read_axi(5'd4, 1'b1);
 
     repeat(10000) @(posedge clk);
     $display("--- Simulation Finished ---");

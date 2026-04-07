@@ -15,6 +15,8 @@ module i2c_master #(
   input   logic [7:0] addr_to_send,
   input   logic new_cmd,
 
+  input   logic hold_bus,
+
   // status interface
   output  logic busy,
   output  logic ack_error,
@@ -26,13 +28,15 @@ module i2c_master #(
   typedef enum logic [3:0] {
     IDLE, 
     START,
+    REP_START,
     ADDRESS_SEND,
     ACK_ADDR,
     DATA_SEND,
     ACK_DATA,
     DATA_RECEIVE,
     MASTER_ACK,
-    STOP
+    STOP,
+    HOLD
   } state_t;
   state_t state;
 
@@ -48,7 +52,8 @@ module i2c_master #(
   logic [7:0] addr_to_send_store;
   logic [7:0] data_read_store;
   logic [2:0] bit_count;
-  
+  logic hold_bus_store;
+
   // tri-state buffer
   // When sda_mode is 1, we drive sda based on sda_h.
   // Standard I2C is Open Drain: Drive '0' or High-Z.
@@ -56,7 +61,7 @@ module i2c_master #(
   assign sda = (!sda_h) ? 1'b0 : 1'bz;
   assign scl = (!scl_h) ? 1'b0 : 1'bz;
   
-  assign busy = (state != IDLE) || start_pending;
+  assign busy = (state != IDLE && state != HOLD) || start_pending;
 
   // phase tick generator
   always_ff @(posedge clk100mhz or posedge reset) begin
@@ -82,14 +87,16 @@ module i2c_master #(
       start_pending <= 1'b0;
       addr_to_send_store <= 8'd0;
       data_to_send_store <= 8'd0;
+      hold_bus_store <= 1'b0;
     end
     else begin
-      if (new_cmd && state == IDLE && !start_pending) begin
+      if (new_cmd && (state == IDLE || state == HOLD) && !start_pending) begin
         start_pending <= 1'b1;
         addr_to_send_store <= addr_to_send;
         data_to_send_store <= data_to_send;
+        hold_bus_store <= hold_bus;
       end
-      else if (tick && state == IDLE && start_pending) begin
+      else if (tick && (state == IDLE  || state == HOLD) && start_pending) begin
         start_pending <= 1'b0;
       end
     end
@@ -106,7 +113,7 @@ module i2c_master #(
     end 
     else if (tick) begin
       if (scl_h == 1'b1 && scl == 1'b0) begin
-
+        // clock stretching
       end
       else begin
         phase <= phase + 2'd1;
@@ -121,6 +128,40 @@ module i2c_master #(
             state <= START;
           end
         end
+
+        HOLD: begin
+          sda_h <= 1'b1;
+          scl_h <= 1'b0;
+          phase <= 2'b00; 
+          if (start_pending) begin
+            ack_error <= 1'b0;
+            state <= REP_START;
+          end
+        end
+
+        REP_START: begin
+          case (phase) 
+            2'b00: begin
+              sda_h <= 1'b1;
+              scl_h <= 1'b0;
+            end
+            2'b01: begin
+              sda_h <= 1'b1;
+              scl_h <= 1'b1;
+            end
+            2'b10: begin
+              sda_h <= 1'b0;
+              scl_h <= 1'b1;
+            end
+            2'b11: begin
+              sda_h <= 1'b0;
+              scl_h <= 1'b0;
+              bit_count <= 3'd7;
+              state <= ADDRESS_SEND;
+            end        
+            default: phase <= 2'b00;  
+          endcase
+        end 
 
         START: begin
           case (phase) 
@@ -226,7 +267,8 @@ module i2c_master #(
             end
             2'b11: begin
               scl_h <= 1'b0;
-              state <= STOP;
+              if (hold_bus_store)  state <= HOLD;
+              else                 state <= STOP;
             end
             default: phase <= 2'b00;
           endcase
@@ -268,8 +310,9 @@ module i2c_master #(
             end
             2'b11: begin
               scl_h <= 1'b0;
-              read_data_out <= data_read_store;
-              state <= STOP;
+              if (state == MASTER_ACK)  read_data_out <= data_read_store;
+              if (hold_bus_store)  state <= HOLD;
+              else                 state <= STOP;
             end
             default: phase <= 2'b00;
           endcase

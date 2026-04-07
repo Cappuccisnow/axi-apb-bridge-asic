@@ -34,6 +34,7 @@ module axi_lite_slave(
   output logic [7:0] i2c_addr_out,
   output logic [7:0] i2c_data_out,
   output logic start_pulse_out,
+  output logic hold_bus_out,
 
   input logic [15:0] status_in,
   input logic [15:0] data_rx_in
@@ -87,6 +88,7 @@ module axi_lite_slave(
       i2c_addr_out <= 8'd0;
       i2c_data_out <= 8'd0;
       start_pulse_out <= 1'b0;
+      hold_bus_out <= 1'b0;
 
       // Reset memory
       for (integer i = 0; i < 32; i++) begin
@@ -109,7 +111,10 @@ module axi_lite_slave(
         case (addr) 
           5'd0: i2c_addr_out <= wdata[7:0];
           5'd1: i2c_data_out <= wdata[7:0];
-          5'd2: if (wdata[0]) start_pulse_out <= 1'b1;
+          5'd2: begin
+            if (wdata[0]) start_pulse_out <= 1'b1;
+            hold_bus_out <= wdata[1];
+          end
           default: memory[addr] <= wdata;
         endcase
       end

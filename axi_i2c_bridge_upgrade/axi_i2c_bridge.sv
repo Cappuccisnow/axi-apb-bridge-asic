@@ -24,6 +24,7 @@ module axi_i2c_bridge (
   logic [7:0] i2c_target_addr;
   logic [7:0] i2c_write_data;
   logic       i2c_start_trigger;
+  logic       i2c_hold_bus;
 
   logic i2c_busy_status;
   logic [7:0] i2c_rx_byte;
@@ -58,6 +59,7 @@ module axi_i2c_bridge (
     .i2c_addr_out   (i2c_target_addr),
     .i2c_data_out   (i2c_write_data),
     .start_pulse_out(i2c_start_trigger),
+    .hold_bus_out   (i2c_hold_bus),
     .status_in      (status_register),
     .data_rx_in     (rx_data_register)
   );
@@ -74,6 +76,7 @@ i2c_master #(
   .addr_to_send(i2c_target_addr),
   .data_to_send(i2c_write_data),
   .new_cmd(i2c_start_trigger),
+  .hold_bus(i2c_hold_bus),
   .busy(i2c_busy_status),
   .ack_error(i2c_ack_err_status),
   .read_data_out(i2c_rx_byte)
