@@ -17,6 +17,11 @@ module i2c_master #(
 
   input   logic hold_bus,
 
+  // fifo ports
+  input   logic tx_empty,
+  output  logic tx_rd_en,
+  output  logic rx_wr_en,
+
   // status interface
   output  logic busy,
   output  logic ack_error,
@@ -62,6 +67,7 @@ module i2c_master #(
   assign scl = (!scl_h) ? 1'b0 : 1'bz;
   
   assign busy = (state != IDLE && state != HOLD) || start_pending;
+  assign read_data_out = data_read_store;
 
   // phase tick generator
   always_ff @(posedge clk100mhz or posedge reset) begin
@@ -86,18 +92,39 @@ module i2c_master #(
     if (reset) begin
       start_pending <= 1'b0;
       addr_to_send_store <= 8'd0;
-      data_to_send_store <= 8'd0;
       hold_bus_store <= 1'b0;
     end
     else begin
       if (new_cmd && (state == IDLE || state == HOLD) && !start_pending) begin
         start_pending <= 1'b1;
         addr_to_send_store <= addr_to_send;
-        data_to_send_store <= data_to_send;
         hold_bus_store <= hold_bus;
       end
       else if (tick && (state == IDLE  || state == HOLD) && start_pending) begin
         start_pending <= 1'b0;
+      end
+    end
+  end
+
+  // fifo read/write pulse generator
+  always_ff @(posedge clk100mhz or posedge reset) begin
+    if (reset) begin
+      tx_rd_en <= 1'b0;
+      rx_wr_en <= 1'b0;
+    end
+    else begin
+      tx_rd_en <= 1'b0;
+      rx_wr_en <= 1'b0;
+      if (tick) begin
+        // pop tx fifo
+        if (state == ACK_ADDR && phase == 2'b11 && addr_to_send_store[0] == 1'b0 && !tx_empty)
+          tx_rd_en <= 1'b1;
+        else if (state == ACK_DATA && phase == 2'b11 && !tx_empty)
+          tx_rd_en <= 1'b1;
+        
+        // push rx fifo
+        if (state == MASTER_ACK && phase == 2'b11)
+          rx_wr_en <= 1'b1;
       end
     end
   end
@@ -224,8 +251,19 @@ module i2c_master #(
             2'b11: begin
               scl_h <= 1'b0;
               bit_count <= 3'd7;
-              if (addr_to_send_store[0] == 1'b1) state <= DATA_RECEIVE;
-              else                               state <= DATA_SEND;
+              if (addr_to_send_store[0] == 1'b1) begin
+                state <= DATA_RECEIVE;
+              end
+              else begin
+                if (!tx_empty) begin
+                  data_to_send_store <= data_to_send;
+                  state <= DATA_SEND;
+                end
+                else begin
+                  if (hold_bus_store) state <= HOLD;
+                  else                state <= STOP;
+                end
+              end
             end
             default: phase <= 2'b00;
           endcase
@@ -267,8 +305,15 @@ module i2c_master #(
             end
             2'b11: begin
               scl_h <= 1'b0;
-              if (hold_bus_store)  state <= HOLD;
-              else                 state <= STOP;
+              if (!tx_empty) begin
+                data_to_send_store <= data_to_send;
+                bit_count <= 3'd7;
+                state <= DATA_SEND;
+              end
+              else begin
+                if (hold_bus_store)  state <= HOLD;
+                else                 state <= STOP;
+              end               
             end
             default: phase <= 2'b00;
           endcase
@@ -310,7 +355,6 @@ module i2c_master #(
             end
             2'b11: begin
               scl_h <= 1'b0;
-              if (state == MASTER_ACK)  read_data_out <= data_read_store;
               if (hold_bus_store)  state <= HOLD;
               else                 state <= STOP;
             end

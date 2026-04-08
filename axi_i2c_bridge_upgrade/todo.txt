@@ -4,15 +4,19 @@
 
 3. add clock stretching support for i2c [x]
 
-4. add repeated START [ ]
+4. add repeated START [x]
 current fsm goes START -> address -> data -> STOP
 to read from sensors, we need to write the internal memory address, then read the data without sending a STOP condition. if we send a STOP, 
 the sensor forgets which memory address we wanted
     - add a hold_bus bit. if the cpu sends this bit, the master will skip the STOP phase, hold scl line low and wait for the cpu to issue the next command
 
-5. add FIFO [ ]
+5. add FIFO [x]
+throw in the modules from apb bridge
 
 6. add interrupt controller [ ]
 we had to write repeat(1000) loop to continuosly read 0x03 to check if busy bit dropped
-    - add dedicated interrupt check wire
+    - add new output i2c_interrupt when
+        + a transaction finishes
+        + an error occurs (slave nacks)
+        + rx fifo hits a threshold or tx fifo empties
 

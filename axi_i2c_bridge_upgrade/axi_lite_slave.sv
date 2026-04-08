@@ -32,9 +32,14 @@ module axi_lite_slave(
 
   // i2c bridge interface
   output logic [7:0] i2c_addr_out,
-  output logic [7:0] i2c_data_out,
+  //output logic [7:0] i2c_data_out,
   output logic start_pulse_out,
   output logic hold_bus_out,
+
+  // fifo ports
+  output logic [7:0] tx_data_out,
+  output logic tx_wr_en,
+  output logic rx_rd_en,
 
   input logic [15:0] status_in,
   input logic [15:0] data_rx_in
@@ -86,7 +91,6 @@ module axi_lite_slave(
     if (!res_n) begin
       current_state <= IDLE;
       i2c_addr_out <= 8'd0;
-      i2c_data_out <= 8'd0;
       start_pulse_out <= 1'b0;
       hold_bus_out <= 1'b0;
 
@@ -110,7 +114,6 @@ module axi_lite_slave(
       if (current_state == WRITE_DATA && wvalid) begin
         case (addr) 
           5'd0: i2c_addr_out <= wdata[7:0];
-          5'd1: i2c_data_out <= wdata[7:0];
           5'd2: begin
             if (wdata[0]) start_pulse_out <= 1'b1;
             hold_bus_out <= wdata[1];
@@ -127,7 +130,7 @@ module axi_lite_slave(
     if (current_state == READ_ACCESS) begin
       case (addr)
         5'd0: rdata = {8'd0, i2c_addr_out};
-        5'd1: rdata = {8'd0, i2c_data_out};
+        5'd1: rdata = {8'd0, tx_data_out};
         5'd2: rdata = 16'd0;
         5'd3: rdata = status_in;
         5'd4: rdata = data_rx_in;
@@ -147,4 +150,12 @@ module axi_lite_slave(
   assign bresp = 2'b00; 
   assign rresp = 2'b00;
 
+  // fifo read/write pulse
+  // push to tx fifo when cpu writes to address 1
+  assign tx_wr_en = (current_state == WRITE_DATA && wvalid && addr == 5'd1);
+
+  // pop from rx fifo when cpu completes a read from address 4
+  assign rx_rd_en = (current_state == READ_ACCESS && rready && addr == 5'd4);
+
+  assign tx_data_out = wdata[7:0];
 endmodule

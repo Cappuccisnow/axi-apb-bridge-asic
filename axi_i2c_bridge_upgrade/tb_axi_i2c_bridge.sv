@@ -17,6 +17,8 @@ module tb_axi_i2c_bridge;
   tri1 sda;
   tri1 scl;
 
+  logic i2c_interrupt;
+
   assign (weak1, weak0) sda = 1'b1;
   assign (weak1, weak0) scl = 1'b1;  
 
@@ -37,7 +39,9 @@ module tb_axi_i2c_bridge;
     
     // I2C
     .sda(sda), 
-    .scl(scl)
+    .scl(scl),
+
+    .i2c_interrupt(i2c_interrupt)
   );
 
   // drives SDA low on the 9th clock tick (ACK)
@@ -45,6 +49,7 @@ module tb_axi_i2c_bridge;
   logic i2c_active = 0;
   int bit_count;
   logic [7:0] shift_reg = 8'd0;
+  
   // open drain assignment
   assign sda = slave_drive_sda ? 1'b0 : 1'bz;
 
@@ -118,7 +123,7 @@ module tb_axi_i2c_bridge;
       else if (bit_count == 18) begin
         if (!is_read_txn) $display("[I2C slave] Master wrote data: 0x%h", shift_reg);
         slave_drive_sda <= 1'b0;
-        bit_count <= 9;
+        bit_count <= 10;
       end
     end
   end
@@ -188,19 +193,18 @@ module tb_axi_i2c_bridge;
     // write i2c address to 0x50
     write_axi(5'd0, 16'h0050); 
     
-    // write i2c data to 0xAA
-    write_axi(5'd1, 16'h00AA); 
-    
+    // blast 3 bytes into tx fifo
+    write_axi(5'd1, 16'h00A1); 
+    write_axi(5'd1, 16'h00A2); 
+    write_axi(5'd1, 16'h00A3); 
+
     // write start bit
     write_axi(5'd2, 16'h0001); 
     
-    $display("--- Wait for I2C Transaction ---");
+    $display("--- Wait for IRQ (burst write) ---");
     //Wait for slow I2C
-    repeat(1000) begin
-      read_axi(5'd3, 1'b1);
-      if  (rdata[0] == 0) break;
-      repeat(5000) @(posedge clk);
-    end
+    wait(i2c_interrupt == 1'b1);
+    @(posedge clk);
 
     $display("--- Starting AXI Read Test ---");
     // read new data from 0x50, last bit is set to 1 (0x51) to indicate read transaction
@@ -208,13 +212,9 @@ module tb_axi_i2c_bridge;
     // write start bit
     write_axi(5'd2, 16'h0001);
 
-    $display("--- Polling status ---");
-    //Wait for slow I2C
-    repeat(1000) begin
-      read_axi(5'd3, 1'b1);
-      if  (rdata[0] == 0) break;
-      repeat(5000) @(posedge clk);
-    end
+    $display("--- Wait for IRQ ---");
+    wait(i2c_interrupt == 1'b1);
+    @(posedge clk);
 
     $display("--- Fetching captured data ---");
     read_axi(5'd4);
@@ -227,23 +227,17 @@ module tb_axi_i2c_bridge;
     //send start bit, but set bit 1 to hold the bus (0x0003 instead of 0x0001) 
     write_axi(5'd2, 16'h0003);
 
-    $display("--- Waiting for the first half to finish ---");
-    repeat(1000) begin
-      read_axi(5'd3, 1'b1);
-      if   (rdata[0] == 0) break;
-      repeat(5000) @(posedge clk);
-    end
+    $display("--- Waiting for IRQ (repeated START bus hold) ---");
+    wait(i2c_interrupt == 1'b1);
+    @(posedge clk);
 
     write_axi(5'd0, 16'h0051);
     write_axi(5'd2, 16'h0001);
 
-    repeat(1000) begin
-      read_axi(5'd3, 1'b1);
-      if   (rdata[0] == 0) break;
-      repeat(5000) @(posedge clk);
-    end
+    wait(i2c_interrupt == 1'b1);
+    @(posedge clk);
 
-    read_axi(5'd4, 1'b1);
+    read_axi(5'd4);
 
     repeat(10000) @(posedge clk);
     $display("--- Simulation Finished ---");
