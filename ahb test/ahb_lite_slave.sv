@@ -38,14 +38,14 @@ module ahb_lite_slave #(
             active_write_phase <= 1'b0;
             hsize_reg <= 3'b010; // default to 32 bit word
         end
-        else begin
+        else if (HREADY) begin
             // HTRANS[1] = 1 means valid transfer -> capture data
-            if (HSEL && HREADY && HTRANS[1]) begin
+            if (HSEL && HTRANS[1]) begin
                 haddr_reg <= HADDR;
                 active_write_phase <= HWRITE;
                 hsize_reg <= HSIZE;
             end
-            else if (HREADY) begin
+            else begin
                 active_write_phase <= 1'b0;
             end
         end
